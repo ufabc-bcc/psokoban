@@ -1,32 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define BOARD_SIZE 1024
 #define BUFFER_SIZE 32
 
-struct player_s {
+typedef struct {
   int x;
   int y;
-};
+} player_t;
 
-void read_level(char dest_board[], char curr_board[], struct player_s *player);
-
-int main(void) {
-  char dest_board[BOARD_SIZE], curr_board[BOARD_SIZE];
-  struct player_s *player;
-
-  player = malloc(sizeof(struct player_s));
-
-  read_level(dest_board, curr_board, player);
-
-  printf("dest_board: %s\n", dest_board);
-  printf("curr_board: %s\n", curr_board);
-  printf("player->x: %d, player->y: %d\n", player->x, player->y);
-
-  return 0;
-}
-
-void read_level(char dest_board[], char curr_board[], struct player_s *player) {
+void read_level(char dest_board[], char curr_board[], int y_loc[],
+                int *y_height, player_t *player) {
   int board_idx = 0;
   int r = 0;
   int c = 0;
@@ -40,6 +25,11 @@ void read_level(char dest_board[], char curr_board[], struct player_s *player) {
         c = 0;
         r++;
         break;
+      }
+
+      if (c == 0) {
+        y_loc[r] = board_idx;
+        *y_height = r + 1;
       }
 
       char ch = buffer[buffer_idx];
@@ -58,4 +48,22 @@ void read_level(char dest_board[], char curr_board[], struct player_s *player) {
 
   dest_board[board_idx] = '\0';
   curr_board[board_idx] = '\0';
+}
+
+int main(void) {
+  char dest_board[BOARD_SIZE], curr_board[BOARD_SIZE];
+  int y_loc[BOARD_SIZE], y_height;
+  player_t *player;
+
+  player = malloc(sizeof(player));
+
+  read_level(dest_board, curr_board, y_loc, &y_height, player);
+
+  printf("dest_board: %s\n", dest_board);
+  printf("curr_board: %s\n", curr_board);
+  printf("player->x: %d, player->y: %d\n", player->x, player->y);
+  for (int i = 0; i < y_height; i++)
+    printf("y_loc[%d] = %d\n", i, y_loc[i]);
+
+  return 0;
 }
