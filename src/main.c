@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +51,19 @@ void read_level(char dest_board[], char curr_board[], int y_loc[],
   curr_board[board_idx] = '\0';
 }
 
+void move(char *moved_board[], int y_loc[], int x, int y, int dx, int dy,
+          char trial_board[]) {
+  int new_player_idx = y_loc[y + dy] + x + dx;
+
+  if (trial_board[new_player_idx] != ' ')
+    *moved_board = NULL;
+  else {
+    strcpy(*moved_board, trial_board);
+    (*moved_board)[y_loc[y] + x] = ' ';
+    (*moved_board)[new_player_idx] = '@';
+  }
+}
+
 int main(void) {
   char dest_board[BOARD_SIZE], curr_board[BOARD_SIZE];
   int y_loc[BOARD_SIZE], y_height;
@@ -58,12 +72,34 @@ int main(void) {
   player = malloc(sizeof(player));
 
   read_level(dest_board, curr_board, y_loc, &y_height, player);
+#ifdef DEBUG
+  char *expected_dest_board =
+      "########     ##     ##. #  ##.    ##.    ##.#   ########";
+  assert(strcmp(dest_board, expected_dest_board) == 0);
 
-  printf("dest_board: %s\n", dest_board);
-  printf("curr_board: %s\n", curr_board);
-  printf("player->x: %d, player->y: %d\n", player->x, player->y);
+  char *expected_curr_board =
+      "########     ##     ##  #  ##  $$ ## $$  ## #  @########";
+  assert(strcmp(curr_board, expected_curr_board) == 0);
+
+  assert(player->x == 5);
+  assert(player->y == 6);
+
   for (int i = 0; i < y_height; i++)
-    printf("y_loc[%d] = %d\n", i, y_loc[i]);
+    assert(y_loc[i] == i * 7);
+#endif
+
+#ifdef DEBUG
+  char *moved_board;
+  moved_board = malloc(BOARD_SIZE);
+
+  move(&moved_board, y_loc, player->x, player->y, 0, -1, curr_board);
+  assert(strcmp(moved_board,
+                "########     ##     ##  #  ##  $$ ## $$ @## #   ########") ==
+         0);
+
+  move(&moved_board, y_loc, player->x, player->y, 1, 0, curr_board);
+  assert(moved_board == NULL);
+#endif
 
   return 0;
 }
