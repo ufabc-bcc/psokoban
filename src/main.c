@@ -3,9 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define BOARD_SIZE 1024
+#define BOARD_SIZE 4096
 #define BUFFER_SIZE 32
-#define HISTORY_SIZE 4096
+#define HISTORY_SIZE 1048576
 
 typedef struct player_s {
   int x;
@@ -90,18 +90,24 @@ node_t *dequeue(queue_t *queue) {
   return tmp;
 }
 
-void *histappend(history_t *history, char* value) {
+void *histappend(history_t *history, const char *value) {
   history->items[history->idx] = malloc(strlen(value) + 1);
   strcpy(history->items[history->idx], value);
   history->idx++;
 }
 
-int histexists(history_t *history, char* value) {
+int histexists(history_t *history, const char *value) {
   for (int i = 0; i < history->idx; i++) {
     if (0 == strcmp(history->items[i], value))
       return 1;
   }
   return 0;
+}
+
+void charappend(char *dest, char value) {
+  int len = strlen(dest);
+  dest[len] = value;
+  dest[len + 1] = '\0';
 }
 
 void read_level(char (*dest_board)[], char (*curr_board)[], int (*y_loc)[],
@@ -176,6 +182,65 @@ int is_solved(char trial_board[], char dest_board[]) {
     if ((dest_board[board_idx] == '.') != (trial_board[board_idx] == '$'))
       return 0;
   return 1;
+}
+
+int solve(char **path, char *dest_board, char *curr_board, int *y_loc,
+          player_t *player) {
+  char dir_labels[][2] = {{'u', 'U'}, {'r', 'R'}, {'d', 'D'}, {'l', 'L'}};
+  int dirs[][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+
+  history_t *history = mkhistory();
+  queue_t *queue = mkqueue();
+
+  histappend(history, curr_board);
+  enqueue(queue, mkboard(curr_board, "", player->x, player->y));
+
+  node_t *head = dequeue(queue);
+
+  while (head) {
+    board_t *item = head->value;
+
+    for (int i = 0; i < 4; i++) {
+      char *trial = malloc(strlen(item->cur) + 1);
+      char *new_sol = malloc(strlen(item->sol) + 2);
+
+      if (trial)
+        strcpy(trial, item->cur);
+      if (new_sol)
+        strcpy(new_sol, item->sol);
+
+      int dx = dirs[i][0];
+      int dy = dirs[i][1];
+
+      // are we standing next to a box ?
+      if (trial[y_loc[item->y + dy] + item->x + dx] == '$') {
+        // can we push it ?
+        if (push(&trial, y_loc, item->x, item->y, dx, dy)) {
+          // or did we already try this one ?
+          if (!histexists(history, trial)) {
+            charappend(new_sol, dir_labels[i][1]);
+
+            if (is_solved(trial, dest_board)) {
+              strcpy(*path, new_sol);
+              return 1;
+            }
+
+            enqueue(queue, mkboard(trial, new_sol, item->x + dx, item->y + dy));
+            histappend(history, trial);
+          }
+        }
+      } else if (move(&trial, y_loc, item->x, item->y, dx, dy)) {
+        if (!histexists(history, trial)) {
+          charappend(new_sol, dir_labels[i][0]);
+          enqueue(queue, mkboard(trial, new_sol, item->x + dx, item->y + dy));
+          histappend(history, trial);
+        }
+      }
+    }
+    head = dequeue(queue);
+  }
+
+  return 0;
 }
 
 #ifdef DEBUG
@@ -264,7 +329,7 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
   assert(0 == strcmp(second->value->sol, "R"));
   assert(second->value->x == 2);
   assert(second->value->y == 1);
-  
+
   assert(third == NULL);
 
   history_t *history = mkhistory();
@@ -279,6 +344,7 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
 
 int main(void) {
   char dest_board[BOARD_SIZE], curr_board[BOARD_SIZE];
+  char *path = malloc(BOARD_SIZE);
   int y_loc[BOARD_SIZE], y_height;
   player_t *player;
 
@@ -286,9 +352,11 @@ int main(void) {
 
   read_level(&dest_board, &curr_board, &y_loc, &y_height, &player);
 
-#ifdef DEBUG
-  test(dest_board, curr_board, y_loc, y_height, player);
-#endif
+  int found = solve(&path, dest_board, curr_board, y_loc, player);
+  if (found)
+    printf("%s", path);
+  else
+    printf("Path not found");
 
   free(player);
 
