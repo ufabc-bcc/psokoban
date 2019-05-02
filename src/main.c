@@ -5,6 +5,7 @@
 
 #define BOARD_SIZE 1024
 #define BUFFER_SIZE 32
+#define HISTORY_SIZE 4096
 
 typedef struct player_s {
   int x;
@@ -27,6 +28,11 @@ typedef struct queue_s {
   node_t *head;
   node_t *tail;
 } queue_t;
+
+typedef struct history_s {
+  char **items;
+  int idx;
+} history_t;
 
 board_t *mkboard(const char *cur, const char *sol, int x, int y) {
   board_t *board = malloc(sizeof(board_t));
@@ -54,6 +60,12 @@ queue_t *mkqueue() {
   return queue;
 }
 
+history_t *mkhistory() {
+  history_t *history = malloc(sizeof(history_t));
+  history->items = malloc(HISTORY_SIZE);
+  history->idx = 0;
+}
+
 void enqueue(queue_t *queue, board_t *board) {
   node_t *node = mknode(board);
 
@@ -76,6 +88,20 @@ node_t *dequeue(queue_t *queue) {
     queue->tail = NULL;
 
   return tmp;
+}
+
+void *histappend(history_t *history, char* value) {
+  history->items[history->idx] = malloc(strlen(value) + 1);
+  strcpy(history->items[history->idx], value);
+  history->idx++;
+}
+
+int histexists(history_t *history, char* value) {
+  for (int i = 0; i < history->idx; i++) {
+    if (0 == strcmp(history->items[i], value))
+      return 1;
+  }
+  return 0;
 }
 
 void read_level(char (*dest_board)[], char (*curr_board)[], int (*y_loc)[],
@@ -240,6 +266,14 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
   assert(second->value->y == 1);
   
   assert(third == NULL);
+
+  history_t *history = mkhistory();
+  histappend(history, "Hello");
+  histappend(history, "World");
+
+  assert(histexists(history, "Hello"));
+  assert(histexists(history, "World"));
+  assert(!histexists(history, "Hello World!"));
 }
 #endif
 
