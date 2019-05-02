@@ -64,6 +64,20 @@ void move(char (*moved_board)[], int y_loc[], int x, int y, int dx, int dy,
   }
 }
 
+void push(char (*pushed_board)[], int y_loc[], int x, int y, int dx, int dy,
+          char trial_board[]) {
+  int new_box_idx = y_loc[y + 2 * dy] + x + 2 * dx;
+
+  if (trial_board[new_box_idx] != ' ')
+    (*pushed_board)[0] = '\0';
+  else {
+    strcpy(*pushed_board, trial_board);
+    (*pushed_board)[y_loc[y] + x] = ' ';
+    (*pushed_board)[y_loc[y + dy] + x + dx] = '@';
+    (*pushed_board)[new_box_idx] = '$';
+  }
+}
+
 int main(void) {
   char dest_board[BOARD_SIZE], curr_board[BOARD_SIZE];
   int y_loc[BOARD_SIZE], y_height;
@@ -92,20 +106,37 @@ int main(void) {
   char moved_board[BOARD_SIZE];
 
   move(&moved_board, y_loc, player->x, player->y, 0, -1, curr_board);
-  assert(strcmp(moved_board,
-                "########     ##     ##  #  ##  $$ ## $$ @## #   ########") ==
-         0);
+  assert(0 ==
+         strcmp(moved_board,
+                "########     ##     ##  #  ##  $$ ## $$ @## #   ########"));
 
   move(&moved_board, y_loc, player->x, player->y, 1, 0, curr_board);
-  assert(strcmp(moved_board, "") == 0);
+  assert(0 == strcmp(moved_board, ""));
 
   move(&moved_board, y_loc, player->x, player->y, 0, 1, curr_board);
-  assert(strcmp(moved_board, "") == 0);
+  assert(0 == strcmp(moved_board, ""));
 
   move(&moved_board, y_loc, player->x, player->y, -1, 0, curr_board);
-  assert(strcmp(moved_board,
-                "########     ##     ##  #  ##  $$ ## $$  ## # @ ########") ==
-         0);
+  assert(0 ==
+         strcmp(moved_board,
+                "########     ##     ##  #  ##  $$ ## $$  ## # @ ########"));
+#endif
+
+#ifdef DEBUG
+  char pushed_board[BOARD_SIZE];
+
+  push(&pushed_board, y_loc, player->x, player->y, 0, -1, curr_board);
+  assert(0 ==
+         strcmp(pushed_board,
+                "########     ##     ##  #  ##  $$$## $$ @## #   ########"));
+
+  push(&pushed_board, y_loc, player->x, player->y, 1, 0, curr_board);
+  assert(0 == strcmp(pushed_board, ""));
+
+  push(&pushed_board, y_loc, player->x, player->y, -1, 0, curr_board);
+  assert(0 ==
+         strcmp(pushed_board,
+                "########     ##     ##  #  ##  $$ ## $$  ## #$@ ########"));
 #endif
 
   free(player);
