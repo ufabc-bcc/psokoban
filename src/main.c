@@ -51,30 +51,30 @@ void read_level(char (*dest_board)[], char (*curr_board)[], int (*y_loc)[],
   (*curr_board)[board_idx] = '\0';
 }
 
-void move(char (*moved_board)[], int y_loc[], int x, int y, int dx, int dy,
-          char trial_board[]) {
+int move(char **trial_board, int y_loc[], int x, int y, int dx, int dy) {
   int new_player_idx = y_loc[y + dy] + x + dx;
 
-  if (trial_board[new_player_idx] != ' ')
-    (*moved_board)[0] = '\0';
-  else {
-    strcpy(*moved_board, trial_board);
-    (*moved_board)[y_loc[y] + x] = ' ';
-    (*moved_board)[new_player_idx] = '@';
+  if ((*trial_board)[new_player_idx] != ' ') {
+    (*trial_board)[0] = '\0';
+    return 0;
+  } else {
+    (*trial_board)[y_loc[y] + x] = ' ';
+    (*trial_board)[new_player_idx] = '@';
+    return 1;
   }
 }
 
-void push(char (*pushed_board)[], int y_loc[], int x, int y, int dx, int dy,
-          char trial_board[]) {
+int push(char **trial_board, int y_loc[], int x, int y, int dx, int dy) {
   int new_box_idx = y_loc[y + 2 * dy] + x + 2 * dx;
 
-  if (trial_board[new_box_idx] != ' ')
-    (*pushed_board)[0] = '\0';
-  else {
-    strcpy(*pushed_board, trial_board);
-    (*pushed_board)[y_loc[y] + x] = ' ';
-    (*pushed_board)[y_loc[y + dy] + x + dx] = '@';
-    (*pushed_board)[new_box_idx] = '$';
+  if ((*trial_board)[new_box_idx] != ' ') {
+    (*trial_board)[0] = '\0';
+    return 0;
+  } else {
+    (*trial_board)[y_loc[y] + x] = ' ';
+    (*trial_board)[y_loc[y + dy] + x + dx] = '@';
+    (*trial_board)[new_box_idx] = '$';
+    return 1;
   }
 }
 
@@ -110,47 +110,60 @@ int main(void) {
 #endif
 
 #ifdef DEBUG
-  char moved_board[BOARD_SIZE];
+  char *moved_board = malloc(strlen(curr_board) + 1);
 
-  move(&moved_board, y_loc, player->x, player->y, 0, -1, curr_board);
+  strcpy(moved_board, curr_board);
+  move(&moved_board, y_loc, player->x, player->y, 0, -1);
   assert(0 ==
          strcmp(moved_board,
                 "########     ##     ##  #  ##  $$ ## $$ @## #   ########"));
 
-  move(&moved_board, y_loc, player->x, player->y, 1, 0, curr_board);
+  strcpy(moved_board, curr_board);
+  move(&moved_board, y_loc, player->x, player->y, 1, 0);
   assert(0 == strcmp(moved_board, ""));
 
-  move(&moved_board, y_loc, player->x, player->y, 0, 1, curr_board);
+  strcpy(moved_board, curr_board);
+  move(&moved_board, y_loc, player->x, player->y, 0, 1);
   assert(0 == strcmp(moved_board, ""));
 
-  move(&moved_board, y_loc, player->x, player->y, -1, 0, curr_board);
+  strcpy(moved_board, curr_board);
+  move(&moved_board, y_loc, player->x, player->y, -1, 0);
   assert(0 ==
          strcmp(moved_board,
                 "########     ##     ##  #  ##  $$ ## $$  ## # @ ########"));
+
+  free(moved_board);
 #endif
 
 #ifdef DEBUG
-  char pushed_board[BOARD_SIZE];
+  char *pushed_board = malloc(strlen(curr_board) + 1);
 
-  push(&pushed_board, y_loc, player->x, player->y, 0, -1, curr_board);
+  strcpy(pushed_board, curr_board);
+  push(&pushed_board, y_loc, player->x, player->y, 0, -1);
   assert(0 ==
          strcmp(pushed_board,
                 "########     ##     ##  #  ##  $$$## $$ @## #   ########"));
 
-  push(&pushed_board, y_loc, player->x, player->y, 1, 0, curr_board);
+  strcpy(pushed_board, curr_board);
+  push(&pushed_board, y_loc, player->x, player->y, 1, 0);
   assert(0 == strcmp(pushed_board, ""));
 
-  push(&pushed_board, y_loc, player->x, player->y, -1, 0, curr_board);
+  strcpy(pushed_board, curr_board);
+  push(&pushed_board, y_loc, player->x, player->y, -1, 0);
   assert(0 ==
          strcmp(pushed_board,
                 "########     ##     ##  #  ##  $$ ## $$  ## #$@ ########"));
+
+  free(pushed_board);
 #endif
 
 #ifdef DEBUG
-  assert(is_solved("########     ##@    ##$ #  ##$    ##$    ##$#   ########",
+  assert(1 ==
+         is_solved("########     ##@    ##$ #  ##$    ##$    ##$#   ########",
                    dest_board));
-  assert(!is_solved("########     ##     ##  #$ ##  $@ ## $$  ## #   ########",
-                    dest_board));
+  assert(0 ==
+         is_solved("########     ##     ##  #$ ##  $@ ## $$  ## #   ########",
+                   dest_board));
 #endif
 
   free(player);
