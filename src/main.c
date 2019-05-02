@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "uthash.h"
+
 #define BOARD_SIZE 4096
 #define BUFFER_SIZE 32
 #define HISTORY_SIZE 1048576
@@ -29,10 +31,10 @@ typedef struct queue_s {
   node_t *tail;
 } queue_t;
 
-typedef struct history_s {
-  char **items;
-  int idx;
-} history_t;
+struct history_entry_s {
+  char *key;
+  UT_hash_handle hh;
+};
 
 board_t *mkboard(const char *cur, const char *sol, int x, int y) {
   board_t *board = malloc(sizeof(board_t));
@@ -60,12 +62,6 @@ queue_t *mkqueue() {
   return queue;
 }
 
-history_t *mkhistory() {
-  history_t *history = malloc(sizeof(history_t));
-  history->items = malloc(HISTORY_SIZE);
-  history->idx = 0;
-}
-
 void enqueue(queue_t *queue, board_t *board) {
   node_t *node = mknode(board);
 
@@ -90,18 +86,19 @@ node_t *dequeue(queue_t *queue) {
   return tmp;
 }
 
-void *histappend(history_t *history, const char *value) {
-  history->items[history->idx] = malloc(strlen(value) + 1);
-  strcpy(history->items[history->idx], value);
-  history->idx++;
+struct history_entry_s *history = NULL;
+
+void histappend(char *val) {
+  struct history_entry_s *entry = malloc(sizeof(struct history_entry_s));
+  entry->key = malloc(strlen(val) + 1);
+  strcpy(entry->key, val);
+  HASH_ADD_STR(history, key, entry);
 }
 
-int histexists(history_t *history, const char *value) {
-  for (int i = 0; i < history->idx; i++) {
-    if (0 == strcmp(history->items[i], value))
-      return 1;
-  }
-  return 0;
+int histexists(char *val) {
+  struct history_entry_s *entry = NULL;
+  HASH_FIND_STR(history, val, entry);
+  return NULL != entry;
 }
 
 void charappend(char *dest, char value) {
@@ -189,10 +186,9 @@ int solve(char **path, char *dest_board, char *curr_board, int *y_loc,
   char dir_labels[][2] = {{'u', 'U'}, {'r', 'R'}, {'d', 'D'}, {'l', 'L'}};
   int dirs[][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
 
-  history_t *history = mkhistory();
   queue_t *queue = mkqueue();
 
-  histappend(history, curr_board);
+  histappend(curr_board);
   enqueue(queue, mkboard(curr_board, "", player->x, player->y));
 
   node_t *head = dequeue(queue);
@@ -217,7 +213,7 @@ int solve(char **path, char *dest_board, char *curr_board, int *y_loc,
         // can we push it ?
         if (push(&trial, y_loc, item->x, item->y, dx, dy)) {
           // or did we already try this one ?
-          if (!histexists(history, trial)) {
+          if (!histexists(trial)) {
             charappend(new_sol, dir_labels[i][1]);
 
             if (is_solved(trial, dest_board)) {
@@ -226,14 +222,14 @@ int solve(char **path, char *dest_board, char *curr_board, int *y_loc,
             }
 
             enqueue(queue, mkboard(trial, new_sol, item->x + dx, item->y + dy));
-            histappend(history, trial);
+            histappend(trial);
           }
         }
       } else if (move(&trial, y_loc, item->x, item->y, dx, dy)) {
-        if (!histexists(history, trial)) {
+        if (!histexists(trial)) {
           charappend(new_sol, dir_labels[i][0]);
           enqueue(queue, mkboard(trial, new_sol, item->x + dx, item->y + dy));
-          histappend(history, trial);
+          histappend(trial);
         }
       }
     }
@@ -332,13 +328,12 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
 
   assert(third == NULL);
 
-  history_t *history = mkhistory();
-  histappend(history, "Hello");
-  histappend(history, "World");
+  histappend("Hello");
+  histappend("World");
 
-  assert(histexists(history, "Hello"));
-  assert(histexists(history, "World"));
-  assert(!histexists(history, "Hello World!"));
+  assert(histexists("Hello"));
+  assert(histexists("World"));
+  assert(!histexists("Hello World!"));
 }
 #endif
 
