@@ -6,10 +6,77 @@
 #define BOARD_SIZE 1024
 #define BUFFER_SIZE 32
 
-typedef struct {
+typedef struct player_s {
   int x;
   int y;
 } player_t;
+
+typedef struct board_s {
+  char *cur;
+  char *sol;
+  int x;
+  int y;
+} board_t;
+
+typedef struct node_s {
+  board_t *value;
+  struct node_s *next;
+} node_t;
+
+typedef struct queue_s {
+  node_t *head;
+  node_t *tail;
+} queue_t;
+
+board_t *mkboard(const char *cur, const char *sol, int x, int y) {
+  board_t *board = malloc(sizeof(board_t));
+  board->cur = malloc(strlen(cur) + 2);
+  board->sol = malloc(strlen(sol) + 2);
+  if (board->cur)
+    strcpy(board->cur, cur);
+  if (board->sol)
+    strcpy(board->sol, sol);
+  board->x = x;
+  board->y = y;
+  return board;
+}
+
+node_t *mknode(board_t *board) {
+  node_t *node = malloc(sizeof(node_t));
+  node->value = board;
+  node->next = NULL;
+  return node;
+}
+
+queue_t *mkqueue() {
+  queue_t *queue = malloc(sizeof(queue_t));
+  queue->head = queue->tail = NULL;
+  return queue;
+}
+
+void enqueue(queue_t *queue, board_t *board) {
+  node_t *node = mknode(board);
+
+  if (NULL == queue->tail)
+    queue->head = queue->tail = node;
+  else {
+    queue->tail->next = node;
+    queue->tail = node;
+  }
+}
+
+node_t *dequeue(queue_t *queue) {
+  if (NULL == queue->head)
+    return NULL;
+
+  node_t *tmp = queue->head;
+  queue->head = queue->head->next;
+
+  if (NULL == queue->head)
+    queue->tail = NULL;
+
+  return tmp;
+}
 
 void read_level(char (*dest_board)[], char (*curr_board)[], int (*y_loc)[],
                 int *y_height, player_t **player) {
@@ -85,16 +152,9 @@ int is_solved(char trial_board[], char dest_board[]) {
   return 1;
 }
 
-int main(void) {
-  char dest_board[BOARD_SIZE], curr_board[BOARD_SIZE];
-  int y_loc[BOARD_SIZE], y_height;
-  player_t *player;
-
-  player = malloc(sizeof(player_t));
-
-  read_level(&dest_board, &curr_board, &y_loc, &y_height, &player);
-
 #ifdef DEBUG
+void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
+          player_t *player) {
   assert(0 ==
          strcmp(dest_board,
                 "########     ##     ##. #  ##.    ##.    ##.#   ########"));
@@ -107,9 +167,7 @@ int main(void) {
 
   for (int row = 0; row < y_height; row++)
     assert(y_loc[row] == row * 7);
-#endif
 
-#ifdef DEBUG
   char *moved_board = malloc(strlen(curr_board) + 1);
 
   strcpy(moved_board, curr_board);
@@ -133,9 +191,7 @@ int main(void) {
                 "########     ##     ##  #  ##  $$ ## $$  ## # @ ########"));
 
   free(moved_board);
-#endif
 
-#ifdef DEBUG
   char *pushed_board = malloc(strlen(curr_board) + 1);
 
   strcpy(pushed_board, curr_board);
@@ -155,15 +211,49 @@ int main(void) {
                 "########     ##     ##  #  ##  $$ ## $$  ## #$@ ########"));
 
   free(pushed_board);
-#endif
 
-#ifdef DEBUG
   assert(1 ==
          is_solved("########     ##@    ##$ #  ##$    ##$    ##$#   ########",
                    dest_board));
   assert(0 ==
          is_solved("########     ##     ##  #$ ##  $@ ## $$  ## #   ########",
                    dest_board));
+
+  queue_t *queue = mkqueue();
+  enqueue(queue, mkboard("######@$.######", "", 1, 1));
+  enqueue(queue, mkboard("###### @$######", "R", 2, 1));
+  node_t *first, *second, *third;
+  first = dequeue(queue);
+  second = dequeue(queue);
+  third = dequeue(queue);
+
+  assert(first->next == second);
+  assert(0 == strcmp(first->value->cur, "######@$.######"));
+  assert(0 == strcmp(first->value->sol, ""));
+  assert(first->value->x == 1);
+  assert(first->value->y == 1);
+
+  assert(second->next == NULL);
+  assert(0 == strcmp(second->value->cur, "###### @$######"));
+  assert(0 == strcmp(second->value->sol, "R"));
+  assert(second->value->x == 2);
+  assert(second->value->y == 1);
+  
+  assert(third == NULL);
+}
+#endif
+
+int main(void) {
+  char dest_board[BOARD_SIZE], curr_board[BOARD_SIZE];
+  int y_loc[BOARD_SIZE], y_height;
+  player_t *player;
+
+  player = malloc(sizeof(player_t));
+
+  read_level(&dest_board, &curr_board, &y_loc, &y_height, &player);
+
+#ifdef DEBUG
+  test(dest_board, curr_board, y_loc, y_height, player);
 #endif
 
   free(player);
