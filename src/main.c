@@ -78,6 +78,13 @@ void push(char (*pushed_board)[], int y_loc[], int x, int y, int dx, int dy,
   }
 }
 
+int is_solved(char trial_board[], char dest_board[]) {
+  for (int board_idx = 0; dest_board[board_idx] != '\0'; board_idx++)
+    if ((dest_board[board_idx] == '.') != (trial_board[board_idx] == '$'))
+      return 0;
+  return 1;
+}
+
 int main(void) {
   char dest_board[BOARD_SIZE], curr_board[BOARD_SIZE];
   int y_loc[BOARD_SIZE], y_height;
@@ -137,6 +144,13 @@ int main(void) {
   assert(0 ==
          strcmp(pushed_board,
                 "########     ##     ##  #  ##  $$ ## $$  ## #$@ ########"));
+#endif
+
+#ifdef DEBUG
+  assert(is_solved("########     ##@    ##$ #  ##$    ##$    ##$#   ########",
+                   dest_board));
+  assert(!is_solved("########     ##     ##  #$ ##  $@ ## $$  ## #   ########",
+                    dest_board));
 #endif
 
   free(player);
