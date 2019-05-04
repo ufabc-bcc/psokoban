@@ -31,10 +31,10 @@ typedef struct queue_s {
   node_t *tail;
 } queue_t;
 
-struct history_entry_s {
+typedef struct history_entry_s {
   char *key;
   UT_hash_handle hh;
-};
+} history_entry_t;
 
 board_t *mkboard(const char *cur, const char *sol, int x, int y) {
   board_t *board = malloc(sizeof(board_t));
@@ -86,19 +86,51 @@ node_t *dequeue(queue_t *queue) {
   return tmp;
 }
 
-struct history_entry_s *history = NULL;
+void freeboard(board_t *board) {
+  if (NULL != board->cur)
+    free(board->cur);
+  if (NULL != board->sol)
+    free(board->sol);
+  free(board);
+}
+
+void freenode(node_t *node) {
+  if (NULL != node->value)
+    freeboard(node->value);
+  free(node);
+}
+
+void freequeue(queue_t *queue) {
+  while (NULL != queue->head) {
+    node_t *tmp = dequeue(queue);
+    freenode(tmp);
+  }
+  free(queue);
+}
+
+history_entry_t *history = NULL;
 
 void histappend(char *val) {
-  struct history_entry_s *entry = malloc(sizeof(struct history_entry_s));
+  history_entry_t *entry = malloc(sizeof(history_entry_t));
   entry->key = malloc(strlen(val) + 1);
   strcpy(entry->key, val);
   HASH_ADD_STR(history, key, entry);
 }
 
 int histexists(char *val) {
-  struct history_entry_s *entry = NULL;
+  history_entry_t *entry = NULL;
   HASH_FIND_STR(history, val, entry);
   return NULL != entry;
+}
+
+void freehist() {
+  history_entry_t *entry, *tmp;
+
+  HASH_ITER(hh, history, entry, tmp) {
+    HASH_DEL(history, entry);
+    free(entry->key);
+    free(entry);
+  }
 }
 
 void charappend(char *dest, char value) {
@@ -107,7 +139,7 @@ void charappend(char *dest, char value) {
   dest[len + 1] = '\0';
 }
 
-void read_level(char (*dest_board)[], char (*curr_board)[], int (*y_loc)[],
+void read_level(char **dest_board, char **curr_board, int **y_loc,
                 int *y_height, player_t **player) {
   int row = 0;
   int col = 0;
@@ -218,6 +250,10 @@ int solve(char **path, char *dest_board, char *curr_board, int *y_loc,
 
             if (is_solved(trial, dest_board)) {
               strcpy(*path, new_sol);
+              free(trial);
+              free(new_sol);
+              freenode(head);
+              freequeue(queue);
               return 1;
             }
 
@@ -232,12 +268,19 @@ int solve(char **path, char *dest_board, char *curr_board, int *y_loc,
           histappend(trial);
         }
       }
+      free(trial);
+      free(new_sol);
     }
+    freenode(head);
     head = dequeue(queue);
   }
 
+  freequeue(queue);
+
   return 0;
 }
+
+#define DEBUG 1
 
 #ifdef DEBUG
 void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
@@ -328,6 +371,10 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
 
   assert(third == NULL);
 
+  freenode(first);
+  freenode(second);
+  freequeue(queue);
+
   histappend("Hello");
   histappend("World");
 
@@ -338,22 +385,30 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
 #endif
 
 int main(void) {
-  char dest_board[BOARD_SIZE], curr_board[BOARD_SIZE];
+  char *dest_board = malloc(BOARD_SIZE);
+  char *curr_board = malloc(BOARD_SIZE);
   char *path = malloc(BOARD_SIZE);
-  int y_loc[BOARD_SIZE], y_height;
-  player_t *player;
+  int *y_loc = malloc(BOARD_SIZE);
+  player_t *player = malloc(sizeof(player_t));
 
-  player = malloc(sizeof(player_t));
+  int y_height;
 
   read_level(&dest_board, &curr_board, &y_loc, &y_height, &player);
+  test(dest_board, curr_board, y_loc, y_height, player);
 
   int found = solve(&path, dest_board, curr_board, y_loc, player);
+
   if (found)
-    printf("%s", path);
+    printf("%s\n", path);
   else
     printf("Path not found");
 
+  free(dest_board);
+  free(curr_board);
+  free(path);
+  free(y_loc);
   free(player);
+  freehist();
 
   return 0;
 }
