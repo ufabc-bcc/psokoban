@@ -5,20 +5,15 @@
 
 #include "uthash.h"
 
-typedef struct player_s {
-  int x;
-  int y;
-} player_t;
-
 typedef struct board_s {
-  char *cur;
-  char *sol;
-  int x;
-  int y;
+  char *state;
+  char *solution;
+  int player_x;
+  int player_y;
 } board_t;
 
 typedef struct node_s {
-  board_t *value;
+  board_t *board;
   struct node_s *next;
 } node_t;
 
@@ -27,34 +22,43 @@ typedef struct queue_s {
   node_t *tail;
 } queue_t;
 
-typedef struct history_entry_s {
+typedef struct history_s {
   char *key;
   UT_hash_handle hh;
-} history_entry_t;
+} history_t;
 
-board_t *mkboard(const char *cur, const char *sol, int x, int y) {
+history_t *global_history = NULL;
+
+board_t *mkboard(const char *state, const char *solution, int player_x,
+                 int player_y) {
   board_t *board = malloc(sizeof(board_t));
-  board->cur = malloc(strlen(cur) + 1);
-  board->sol = malloc(strlen(sol) + 1);
-  if (board->cur)
-    strcpy(board->cur, cur);
-  if (board->sol)
-    strcpy(board->sol, sol);
-  board->x = x;
-  board->y = y;
+  board->state = malloc(strlen(state) + 1);
+  board->solution = malloc(strlen(solution) + 1);
+
+  if (board->state)
+    strcpy(board->state, state);
+  if (board->solution)
+    strcpy(board->solution, solution);
+  board->player_x = player_x;
+  board->player_y = player_y;
+
   return board;
 }
 
 node_t *mknode(board_t *board) {
   node_t *node = malloc(sizeof(node_t));
-  node->value = board;
+
+  node->board = board;
   node->next = NULL;
+
   return node;
 }
 
 queue_t *mkqueue() {
   queue_t *queue = malloc(sizeof(queue_t));
+
   queue->head = queue->tail = NULL;
+
   return queue;
 }
 
@@ -72,27 +76,47 @@ void enqueue(queue_t *queue, board_t *board) {
 node_t *dequeue(queue_t *queue) {
   if (NULL == queue->head)
     return NULL;
-
   node_t *tmp = queue->head;
   queue->head = queue->head->next;
-
   if (NULL == queue->head)
     queue->tail = NULL;
 
   return tmp;
 }
 
+void add_history(const char *value) {
+  history_t *entry = malloc(sizeof(history_t));
+  entry->key = malloc(strlen(value) + 1);
+
+  strcpy(entry->key, value);
+  HASH_ADD_STR(global_history, key, entry);
+}
+
+int history_exists(const char *value) {
+  history_t *entry = NULL;
+
+  HASH_FIND_STR(global_history, value, entry);
+
+  return NULL != entry;
+}
+
+void put_char_at_end(char *dest, char value) {
+  int len = strlen(dest);
+  dest[len] = value;
+  dest[len + 1] = '\0';
+}
+
 void freeboard(board_t *board) {
-  if (NULL != board->cur)
-    free(board->cur);
-  if (NULL != board->sol)
-    free(board->sol);
+  if (NULL != board->state)
+    free(board->state);
+  if (NULL != board->solution)
+    free(board->solution);
   free(board);
 }
 
 void freenode(node_t *node) {
-  if (NULL != node->value)
-    freeboard(node->value);
+  if (NULL != node->board)
+    freeboard(node->board);
   free(node);
 }
 
@@ -104,39 +128,18 @@ void freequeue(queue_t *queue) {
   free(queue);
 }
 
-history_entry_t *history = NULL;
+void freehistory() {
+  history_t *entry, *tmp;
 
-void histappend(const char *val) {
-  history_entry_t *entry = malloc(sizeof(history_entry_t));
-  entry->key = malloc(strlen(val) + 1);
-  strcpy(entry->key, val);
-  HASH_ADD_STR(history, key, entry);
-}
-
-int histexists(const char *val) {
-  history_entry_t *entry = NULL;
-  HASH_FIND_STR(history, val, entry);
-  return NULL != entry;
-}
-
-void freehist() {
-  history_entry_t *entry, *tmp;
-
-  HASH_ITER(hh, history, entry, tmp) {
-    HASH_DEL(history, entry);
+  HASH_ITER(hh, global_history, entry, tmp) {
+    HASH_DEL(global_history, entry);
     free(entry->key);
     free(entry);
   }
 }
 
-void charappend(char *dest, char value) {
-  int len = strlen(dest);
-  dest[len] = value;
-  dest[len + 1] = '\0';
-}
-
 void read_level(char **dest_board, char **curr_board, int **y_loc,
-                int *y_height, player_t **player) {
+                int *y_height, int *player_x, int *player_y) {
   int row = 0;
   int col = 0;
   int board_idx = 0;
@@ -145,7 +148,7 @@ void read_level(char **dest_board, char **curr_board, int **y_loc,
   char *tmp_dest = malloc(4);
   char *tmp_curr = malloc(4);
   char *buffer = malloc(16);
-  
+
   while (fgets(buffer, sizeof(buffer), stdin)) {
     for (int buffer_idx = 0; buffer_idx < sizeof(buffer); buffer_idx++) {
       if (buffer[buffer_idx] == '\0')
@@ -173,8 +176,8 @@ void read_level(char **dest_board, char **curr_board, int **y_loc,
       tmp_curr[board_idx] = ch != '.' ? ch : ' ';
 
       if (ch == '@') {
-        (*player)->x = col;
-        (*player)->y = row;
+        *player_x = col;
+        *player_y = row;
       }
 
       col++;
@@ -233,39 +236,39 @@ int is_solved(char trial_board[], char dest_board[]) {
 }
 
 int solve(char **path, char *dest_board, char *curr_board, int *y_loc,
-          player_t *player) {
+          int player_x, int player_y) {
   char dir_labels[][2] = {{'u', 'U'}, {'r', 'R'}, {'d', 'D'}, {'l', 'L'}};
   int dirs[][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
 
   queue_t *queue = mkqueue();
 
-  histappend(curr_board);
-  enqueue(queue, mkboard(curr_board, "", player->x, player->y));
+  add_history(curr_board);
+  enqueue(queue, mkboard(curr_board, "", player_x, player_y));
 
   node_t *head = dequeue(queue);
 
   while (head) {
-    board_t *item = head->value;
+    board_t *item = head->board;
 
     for (int i = 0; i < 4; i++) {
-      char *trial = malloc(strlen(item->cur) + 1);
-      char *new_sol = malloc(strlen(item->sol) + 2);
+      char *trial = malloc(strlen(item->state) + 1);
+      char *new_sol = malloc(strlen(item->solution) + 2);
 
       if (trial)
-        strcpy(trial, item->cur);
+        strcpy(trial, item->state);
       if (new_sol)
-        strcpy(new_sol, item->sol);
+        strcpy(new_sol, item->solution);
 
       int dx = dirs[i][0];
       int dy = dirs[i][1];
 
       // are we standing next to a box ?
-      if (trial[y_loc[item->y + dy] + item->x + dx] == '$') {
+      if (trial[y_loc[item->player_y + dy] + item->player_x + dx] == '$') {
         // can we push it ?
-        if (push(&trial, y_loc, item->x, item->y, dx, dy)) {
+        if (push(&trial, y_loc, item->player_x, item->player_y, dx, dy)) {
           // or did we already try this one ?
-          if (!histexists(trial)) {
-            charappend(new_sol, dir_labels[i][1]);
+          if (!history_exists(trial)) {
+            put_char_at_end(new_sol, dir_labels[i][1]);
 
             if (is_solved(trial, dest_board)) {
               strcpy(*path, new_sol);
@@ -276,15 +279,17 @@ int solve(char **path, char *dest_board, char *curr_board, int *y_loc,
               return 1;
             }
 
-            enqueue(queue, mkboard(trial, new_sol, item->x + dx, item->y + dy));
-            histappend(trial);
+            enqueue(queue, mkboard(trial, new_sol, item->player_x + dx,
+                                   item->player_y + dy));
+            add_history(trial);
           }
         }
-      } else if (move(&trial, y_loc, item->x, item->y, dx, dy)) {
-        if (!histexists(trial)) {
-          charappend(new_sol, dir_labels[i][0]);
-          enqueue(queue, mkboard(trial, new_sol, item->x + dx, item->y + dy));
-          histappend(trial);
+      } else if (move(&trial, y_loc, item->player_x, item->player_y, dx, dy)) {
+        if (!history_exists(trial)) {
+          put_char_at_end(new_sol, dir_labels[i][0]);
+          enqueue(queue, mkboard(trial, new_sol, item->player_x + dx,
+                                 item->player_y + dy));
+          add_history(trial);
         }
       }
       free(trial);
@@ -301,7 +306,7 @@ int solve(char **path, char *dest_board, char *curr_board, int *y_loc,
 
 #ifdef DEBUG
 void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
-          player_t *player) {
+          int player_x, int player_y) {
   assert(0 ==
          strcmp(dest_board,
                 "########     ##     ##. #  ##.    ##.    ##.#   ########"));
@@ -309,8 +314,8 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
          strcmp(curr_board,
                 "########     ##     ##  #  ##  $$ ## $$  ## #  @########"));
 
-  assert(player->x == 5);
-  assert(player->y == 6);
+  assert(player_x == 5);
+  assert(player_y == 6);
 
   for (int row = 0; row < y_height; row++)
     assert(y_loc[row] == row * 7);
@@ -318,21 +323,21 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
   char *moved_board = malloc(strlen(curr_board) + 1);
 
   strcpy(moved_board, curr_board);
-  move(&moved_board, y_loc, player->x, player->y, 0, -1);
+  move(&moved_board, y_loc, player_x, player_y, 0, -1);
   assert(0 ==
          strcmp(moved_board,
                 "########     ##     ##  #  ##  $$ ## $$ @## #   ########"));
 
   strcpy(moved_board, curr_board);
-  move(&moved_board, y_loc, player->x, player->y, 1, 0);
+  move(&moved_board, y_loc, player_x, player_y, 1, 0);
   assert(0 == strcmp(moved_board, ""));
 
   strcpy(moved_board, curr_board);
-  move(&moved_board, y_loc, player->x, player->y, 0, 1);
+  move(&moved_board, y_loc, player_x, player_y, 0, 1);
   assert(0 == strcmp(moved_board, ""));
 
   strcpy(moved_board, curr_board);
-  move(&moved_board, y_loc, player->x, player->y, -1, 0);
+  move(&moved_board, y_loc, player_x, player_y, -1, 0);
   assert(0 ==
          strcmp(moved_board,
                 "########     ##     ##  #  ##  $$ ## $$  ## # @ ########"));
@@ -342,17 +347,17 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
   char *pushed_board = malloc(strlen(curr_board) + 1);
 
   strcpy(pushed_board, curr_board);
-  push(&pushed_board, y_loc, player->x, player->y, 0, -1);
+  push(&pushed_board, y_loc, player_x, player_y, 0, -1);
   assert(0 ==
          strcmp(pushed_board,
                 "########     ##     ##  #  ##  $$$## $$ @## #   ########"));
 
   strcpy(pushed_board, curr_board);
-  push(&pushed_board, y_loc, player->x, player->y, 1, 0);
+  push(&pushed_board, y_loc, player_x, player_y, 1, 0);
   assert(0 == strcmp(pushed_board, ""));
 
   strcpy(pushed_board, curr_board);
-  push(&pushed_board, y_loc, player->x, player->y, -1, 0);
+  push(&pushed_board, y_loc, player_x, player_y, -1, 0);
   assert(0 ==
          strcmp(pushed_board,
                 "########     ##     ##  #  ##  $$ ## $$  ## #$@ ########"));
@@ -375,16 +380,16 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
   third = dequeue(queue);
 
   assert(first->next == second);
-  assert(0 == strcmp(first->value->cur, "######@$.######"));
-  assert(0 == strcmp(first->value->sol, ""));
-  assert(first->value->x == 1);
-  assert(first->value->y == 1);
+  assert(0 == strcmp(first->board->state, "######@$.######"));
+  assert(0 == strcmp(first->board->solution, ""));
+  assert(first->board->player_x == 1);
+  assert(first->board->player_y == 1);
 
   assert(second->next == NULL);
-  assert(0 == strcmp(second->value->cur, "###### @$######"));
-  assert(0 == strcmp(second->value->sol, "R"));
-  assert(second->value->x == 2);
-  assert(second->value->y == 1);
+  assert(0 == strcmp(second->board->state, "###### @$######"));
+  assert(0 == strcmp(second->board->solution, "R"));
+  assert(second->board->player_x == 2);
+  assert(second->board->player_y == 1);
 
   assert(third == NULL);
 
@@ -392,12 +397,12 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
   freenode(second);
   freequeue(queue);
 
-  histappend("Hello");
-  histappend("World");
+  add_history("Hello");
+  add_history("World");
 
-  assert(histexists("Hello"));
-  assert(histexists("World"));
-  assert(!histexists("Hello World!"));
+  assert(history_exists("Hello"));
+  assert(history_exists("World"));
+  assert(!history_exists("Hello World!"));
 }
 #endif
 
@@ -406,16 +411,17 @@ int main(void) {
   char *curr_board;
   char *path = malloc(200);
   int *y_loc;
-  player_t *player = malloc(sizeof(player_t));
 
   int y_height;
+  int player_x;
+  int player_y;
 
-  read_level(&dest_board, &curr_board, &y_loc, &y_height, &player);
+  read_level(&dest_board, &curr_board, &y_loc, &y_height, &player_x, &player_y);
 #ifdef DEBUG
-  test(dest_board, curr_board, y_loc, y_height, player);
+  test(dest_board, curr_board, y_loc, y_height, player_x, player_y);
 #endif
 
-  int found = solve(&path, dest_board, curr_board, y_loc, player);
+  int found = solve(&path, dest_board, curr_board, y_loc, player_x, player_y);
 
   if (found)
     printf("%s\n", path);
@@ -426,8 +432,7 @@ int main(void) {
   free(curr_board);
   free(path);
   free(y_loc);
-  free(player);
-  freehist();
+  freehistory();
 
   return 0;
 }
