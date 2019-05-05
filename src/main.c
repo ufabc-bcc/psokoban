@@ -5,10 +5,6 @@
 
 #include "uthash.h"
 
-#define BOARD_SIZE 4096
-#define BUFFER_SIZE 32
-#define HISTORY_SIZE 1048576
-
 typedef struct player_s {
   int x;
   int y;
@@ -38,8 +34,8 @@ typedef struct history_entry_s {
 
 board_t *mkboard(const char *cur, const char *sol, int x, int y) {
   board_t *board = malloc(sizeof(board_t));
-  board->cur = malloc(strlen(cur) + 2);
-  board->sol = malloc(strlen(sol) + 2);
+  board->cur = malloc(strlen(cur) + 1);
+  board->sol = malloc(strlen(sol) + 1);
   if (board->cur)
     strcpy(board->cur, cur);
   if (board->sol)
@@ -110,14 +106,14 @@ void freequeue(queue_t *queue) {
 
 history_entry_t *history = NULL;
 
-void histappend(char *val) {
+void histappend(const char *val) {
   history_entry_t *entry = malloc(sizeof(history_entry_t));
   entry->key = malloc(strlen(val) + 1);
   strcpy(entry->key, val);
   HASH_ADD_STR(history, key, entry);
 }
 
-int histexists(char *val) {
+int histexists(const char *val) {
   history_entry_t *entry = NULL;
   HASH_FIND_STR(history, val, entry);
   return NULL != entry;
@@ -145,7 +141,11 @@ void read_level(char **dest_board, char **curr_board, int **y_loc,
   int col = 0;
   int board_idx = 0;
 
-  char buffer[BUFFER_SIZE];
+  int *tmp_yloc = malloc(1 * sizeof(int));
+  char *tmp_dest = malloc(4);
+  char *tmp_curr = malloc(4);
+  char *buffer = malloc(16);
+  
   while (fgets(buffer, sizeof(buffer), stdin)) {
     for (int buffer_idx = 0; buffer_idx < sizeof(buffer); buffer_idx++) {
       if (buffer[buffer_idx] == '\0')
@@ -157,13 +157,20 @@ void read_level(char **dest_board, char **curr_board, int **y_loc,
       }
 
       if (col == 0) {
-        (*y_loc)[row] = board_idx;
-        *y_height = row + 1;
+        int *tmp = realloc(tmp_yloc, (row + 1) * sizeof(int));
+        tmp_yloc = tmp;
+        tmp_yloc[row] = board_idx;
       }
 
       char ch = buffer[buffer_idx];
-      (*dest_board)[board_idx] = ch != '$' && ch != '@' ? ch : ' ';
-      (*curr_board)[board_idx] = ch != '.' ? ch : ' ';
+
+      char *tmp1 = realloc(tmp_dest, board_idx + 1);
+      tmp_dest = tmp1;
+      tmp_dest[board_idx] = ch != '$' && ch != '@' ? ch : ' ';
+
+      char *tmp2 = realloc(tmp_curr, board_idx + 1);
+      tmp_curr = tmp2;
+      tmp_curr[board_idx] = ch != '.' ? ch : ' ';
 
       if (ch == '@') {
         (*player)->x = col;
@@ -175,8 +182,20 @@ void read_level(char **dest_board, char **curr_board, int **y_loc,
     }
   }
 
-  (*dest_board)[board_idx] = '\0';
-  (*curr_board)[board_idx] = '\0';
+  char *tmp1 = realloc(tmp_dest, board_idx + 1);
+  tmp_dest = tmp1;
+  tmp_dest[board_idx] = '\0';
+
+  char *tmp2 = realloc(tmp_curr, board_idx + 1);
+  tmp_curr = tmp2;
+  tmp_curr[board_idx] = '\0';
+
+  *y_height = row + 1;
+  (*y_loc) = tmp_yloc;
+  (*dest_board) = tmp_dest;
+  (*curr_board) = tmp_curr;
+
+  free(buffer);
 }
 
 int move(char **trial_board, int y_loc[], int x, int y, int dx, int dy) {
@@ -279,8 +298,6 @@ int solve(char **path, char *dest_board, char *curr_board, int *y_loc,
 
   return 0;
 }
-
-#define DEBUG 1
 
 #ifdef DEBUG
 void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
@@ -385,16 +402,18 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
 #endif
 
 int main(void) {
-  char *dest_board = malloc(BOARD_SIZE);
-  char *curr_board = malloc(BOARD_SIZE);
-  char *path = malloc(BOARD_SIZE);
-  int *y_loc = malloc(BOARD_SIZE);
+  char *dest_board;
+  char *curr_board;
+  char *path = malloc(200);
+  int *y_loc;
   player_t *player = malloc(sizeof(player_t));
 
   int y_height;
 
   read_level(&dest_board, &curr_board, &y_loc, &y_height, &player);
+#ifdef DEBUG
   test(dest_board, curr_board, y_loc, y_height, player);
+#endif
 
   int found = solve(&path, dest_board, curr_board, y_loc, player);
 
