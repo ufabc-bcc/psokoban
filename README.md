@@ -4,7 +4,7 @@ Psokoban is a parallel brute force solver for Sokoban
 
 ## Relatório
 
-O relatório está disponível dentro deste projeto e pode ser acessado aqui.
+O relatório está disponível dentro deste projeto e pode ser acessado [aqui](https://github.com/ufabc-bcc/psokoban/blob/master/doc/Sokoban.pdf).
 
 ## Compile
 
