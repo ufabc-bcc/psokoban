@@ -28,5 +28,5 @@ time ./psokoban.out < levels/level_(-1|00|01|A) <num_thread>
 
 ## Considerações
 
-Este algoritmo é baseado na implementação em C# do Rosetta Code e pode ser vista [aqui](https://rosettacode.org/wiki/Sokoban#C.23).
+Este algoritmo é baseado na implementação em C# do Rosetta Code que pode ser vista [aqui](https://rosettacode.org/wiki/Sokoban#C.23).
 
