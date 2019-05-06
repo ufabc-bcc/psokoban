@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "uthash.h"
+#include <omp.h>
 
 typedef struct board_s {
   char *state;
@@ -20,6 +21,7 @@ typedef struct node_s {
 typedef struct queue_s {
   node_t *head;
   node_t *tail;
+  int size;
 } queue_t;
 
 typedef struct history_s {
@@ -58,6 +60,7 @@ queue_t *mkqueue() {
   queue_t *queue = malloc(sizeof(queue_t));
 
   queue->head = queue->tail = NULL;
+  queue->size = 0;
 
   return queue;
 }
@@ -71,6 +74,7 @@ void enqueue(queue_t *queue, board_t *board) {
     queue->tail->next = node;
     queue->tail = node;
   }
+  queue->size++;
 }
 
 node_t *dequeue(queue_t *queue) {
@@ -80,6 +84,7 @@ node_t *dequeue(queue_t *queue) {
   queue->head = queue->head->next;
   if (NULL == queue->head)
     queue->tail = NULL;
+  queue->size--;
 
   return tmp;
 }
@@ -193,7 +198,7 @@ void read_level(char **dest_board, char **curr_board, int **y_loc,
   tmp_curr = tmp2;
   tmp_curr[board_idx] = '\0';
 
-  *y_height = row + 1;
+  *y_height = row;
   (*y_loc) = tmp_yloc;
   (*dest_board) = tmp_dest;
   (*curr_board) = tmp_curr;
@@ -247,7 +252,12 @@ int solve(char **path, char *dest_board, char *curr_board, int *y_loc,
 
   node_t *head = dequeue(queue);
 
-  while (head) {
+#ifndef THREADS
+#define THREADS 5
+#endif
+
+  // run sol
+  while (head && queue->size < THREADS * 4) {
     board_t *item = head->board;
 
     for (int i = 0; i < 4; i++) {
@@ -299,9 +309,92 @@ int solve(char **path, char *dest_board, char *curr_board, int *y_loc,
     head = dequeue(queue);
   }
 
+  queue_t *local_queues[THREADS];
+  for (int i = 0; i < THREADS; i++) {
+    queue_t *tmp = mkqueue();
+    local_queues[i] = tmp;
+  }
+
+  for (int i = 0; queue->size > 0; i++) {
+    if (i == THREADS)
+      i = 0;
+    node_t *local_head = dequeue(queue);
+    enqueue(local_queues[i], local_head->board);
+  }
+
+  int found = 0;
+
+#pragma omp parallel num_threads(THREADS)
+  {
+    int k = omp_get_thread_num();
+
+    node_t *local_head = dequeue(local_queues[k]);
+
+    // run sol
+    while (local_head && !found) {
+      board_t *item = local_head->board;
+
+      for (int i = 0; i < 4; i++) {
+        char *trial = malloc(strlen(item->state) + 1);
+        char *new_sol = malloc(strlen(item->solution) + 2);
+
+        if (trial)
+          strcpy(trial, item->state);
+        if (new_sol)
+          strcpy(new_sol, item->solution);
+
+        int dx = dirs[i][0];
+        int dy = dirs[i][1];
+
+        // are we standing next to a box ?
+        if (trial[y_loc[item->player_y + dy] + item->player_x + dx] == '$') {
+          // can we push it ?
+          if (push(&trial, y_loc, item->player_x, item->player_y, dx, dy)) {
+            // or did we already try this one ?
+            if (!history_exists(trial)) {
+              put_char_at_end(new_sol, dir_labels[i][1]);
+
+#pragma omp critical
+              if (is_solved(trial, dest_board)) {
+                strcpy(*path, new_sol);
+                found = 1;
+                // free(trial);
+                // free(new_sol);
+                // freenode(local_head);
+                // freequeue(local_queues[k]);
+
+              } else {
+                enqueue(local_queues[k],
+                        mkboard(trial, new_sol, item->player_x + dx,
+                                item->player_y + dy));
+                add_history(trial);
+              }
+            }
+          }
+        } else if (move(&trial, y_loc, item->player_x, item->player_y, dx,
+                        dy)) {
+          if (!history_exists(trial)) {
+            put_char_at_end(new_sol, dir_labels[i][0]);
+            enqueue((local_queues[k]),
+                    mkboard(trial, new_sol, item->player_x + dx,
+                            item->player_y + dy));
+#pragma omp critical
+            add_history(trial);
+          }
+        }
+        free(trial);
+        free(new_sol);
+      }
+      freenode(local_head);
+      local_head = dequeue((local_queues[k]));
+    }
+
+    freequeue(local_queues[k]);
+  }
+
   freequeue(queue);
 
-  return 0;
+  return found;
 }
 
 #ifdef DEBUG
@@ -403,13 +496,15 @@ void test(char *dest_board, char *curr_board, int *y_loc, int y_height,
   assert(history_exists("Hello"));
   assert(history_exists("World"));
   assert(!history_exists("Hello World!"));
+
+  freehistory();
 }
 #endif
 
 int main(void) {
   char *dest_board;
   char *curr_board;
-  char *path = malloc(200);
+  char *path = malloc(1024);
   int *y_loc;
 
   int y_height;
