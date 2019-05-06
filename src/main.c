@@ -239,8 +239,9 @@ int is_solved(char trial_board[]) {
   return 1;
 }
 
-char *solve(char *curr_board) {
+char *solve(char *curr_board, int num_threads) {
   char *path = NULL;
+  int found = 0;
 
   char dir_labels[][2] = {{'u', 'U'}, {'r', 'R'}, {'d', 'D'}, {'l', 'L'}};
   int dirs[][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
@@ -250,32 +251,25 @@ char *solve(char *curr_board) {
   add_history(curr_board);
   enqueue(queue, mkboard(curr_board, "", player_x, player_y));
 
-  node_t *head = dequeue(queue);
-
-#ifndef THREADS
-#define THREADS 5
-#endif
-
   // run sol
-  while (head && queue->size < THREADS * 4) {
-    board_t *item = head->board;
+  node_t *head = dequeue(queue);
+  while (head && queue->size < num_threads * 4 && !found) {
+    board_t *board = head->board;
 
     for (int i = 0; i < 4; i++) {
-      char *trial = malloc(strlen(item->state) + 1);
-      char *new_sol = malloc(strlen(item->solution) + 2);
+      char *trial = malloc(strlen(board->state) + 1);
+      char *new_sol = malloc(strlen(board->solution) + 2);
 
-      if (trial)
-        strcpy(trial, item->state);
-      if (new_sol)
-        strcpy(new_sol, item->solution);
+      strcpy(trial, board->state);
+      strcpy(new_sol, board->solution);
 
       int dx = dirs[i][0];
       int dy = dirs[i][1];
 
       // are we standing next to a box ?
-      if (trial[y_loc[item->player_y + dy] + item->player_x + dx] == '$') {
+      if (trial[y_loc[board->player_y + dy] + board->player_x + dx] == '$') {
         // can we push it ?
-        if (push(&trial, item->player_x, item->player_y, dx, dy)) {
+        if (push(&trial, board->player_x, board->player_y, dx, dy)) {
           // or did we already try this one ?
           if (!history_exists(trial)) {
             put_char_at_end(new_sol, dir_labels[i][1]);
@@ -283,23 +277,24 @@ char *solve(char *curr_board) {
             if (is_solved(trial)) {
               path = malloc(strlen(new_sol) + 1);
               strcpy(path, new_sol);
-              free(trial);
-              free(new_sol);
-              freenode(head);
-              freequeue(queue);
-              return path;
+              found = 1;
+              // free(trial);
+              // free(new_sol);
+              // freenode(head);
+              // freequeue(queue);
+              // return path;
+            } else {
+              enqueue(queue, mkboard(trial, new_sol, board->player_x + dx,
+                                     board->player_y + dy));
+              add_history(trial);
             }
-
-            enqueue(queue, mkboard(trial, new_sol, item->player_x + dx,
-                                   item->player_y + dy));
-            add_history(trial);
           }
         }
-      } else if (move(&trial, item->player_x, item->player_y, dx, dy)) {
+      } else if (move(&trial, board->player_x, board->player_y, dx, dy)) {
         if (!history_exists(trial)) {
           put_char_at_end(new_sol, dir_labels[i][0]);
-          enqueue(queue, mkboard(trial, new_sol, item->player_x + dx,
-                                 item->player_y + dy));
+          enqueue(queue, mkboard(trial, new_sol, board->player_x + dx,
+                                 board->player_y + dy));
           add_history(trial);
         }
       }
@@ -310,22 +305,20 @@ char *solve(char *curr_board) {
     head = dequeue(queue);
   }
 
-  queue_t *local_queues[THREADS];
-  for (int i = 0; i < THREADS; i++) {
+  queue_t **local_queues = malloc(num_threads * sizeof(queue_t));
+  for (int i = 0; i < num_threads; i++) {
     queue_t *tmp = mkqueue();
     local_queues[i] = tmp;
   }
 
   for (int i = 0; queue->size > 0; i++) {
-    if (i == THREADS)
+    if (i == num_threads)
       i = 0;
     node_t *local_head = dequeue(queue);
     enqueue(local_queues[i], local_head->board);
   }
 
-  int found = 0;
-
-#pragma omp parallel num_threads(THREADS)
+#pragma omp parallel num_threads(num_threads)
   {
     int k = omp_get_thread_num();
 
@@ -398,9 +391,11 @@ char *solve(char *curr_board) {
   return path;
 }
 
-int main(void) {
+int main(int argc, char* argv[]) {
+  int num_threads = strtol(argv[1], NULL, 10);
+
   char *curr_board = read_level();
-  char *path = solve(curr_board);
+  char *path = solve(curr_board, num_threads);
 
   if (path)
     printf("%s\n", path);
