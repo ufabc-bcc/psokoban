@@ -241,7 +241,6 @@ int is_solved(char trial_board[]) {
 
 char *solve(char *curr_board, int num_threads) {
   char *path = NULL;
-  int found = 0;
 
   char dir_labels[][2] = {{'u', 'U'}, {'r', 'R'}, {'d', 'D'}, {'l', 'L'}};
   int dirs[][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
@@ -251,9 +250,8 @@ char *solve(char *curr_board, int num_threads) {
   add_history(curr_board);
   enqueue(queue, mkboard(curr_board, "", player_x, player_y));
 
-  // run sol
   node_t *head = dequeue(queue);
-  while (head && queue->size < num_threads * 4 && !found) {
+  while (head && queue->size < num_threads * 4 && !path) {
     board_t *board = head->board;
 
     for (int i = 0; i < 4; i++) {
@@ -277,12 +275,6 @@ char *solve(char *curr_board, int num_threads) {
             if (is_solved(trial)) {
               path = malloc(strlen(new_sol) + 1);
               strcpy(path, new_sol);
-              found = 1;
-              // free(trial);
-              // free(new_sol);
-              // freenode(head);
-              // freequeue(queue);
-              // return path;
             } else {
               enqueue(queue, mkboard(trial, new_sol, board->player_x + dx,
                                      board->player_y + dy));
@@ -324,8 +316,7 @@ char *solve(char *curr_board, int num_threads) {
 
     node_t *local_head = dequeue(local_queues[k]);
 
-    // run sol
-    while (local_head && !found) {
+    while (local_head && !path) {
       board_t *item = local_head->board;
 
       for (int i = 0; i < 4; i++) {
@@ -352,12 +343,6 @@ char *solve(char *curr_board, int num_threads) {
               if (is_solved(trial)) {
                 path = malloc(strlen(new_sol) + 1);
                 strcpy(path, new_sol);
-                found = 1;
-                // free(trial);
-                // free(new_sol);
-                // freenode(local_head);
-                // freequeue(local_queues[k]);
-
               } else {
                 enqueue(local_queues[k],
                         mkboard(trial, new_sol, item->player_x + dx,
@@ -391,7 +376,7 @@ char *solve(char *curr_board, int num_threads) {
   return path;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
   int num_threads = strtol(argv[1], NULL, 10);
 
   char *curr_board = read_level();
