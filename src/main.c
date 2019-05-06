@@ -310,6 +310,7 @@ char *solve(char *curr_board, int num_threads) {
     enqueue(local_queues[i], local_head->board);
   }
 
+double start = omp_get_wtime();
 #pragma omp parallel num_threads(num_threads)
   {
     int k = omp_get_thread_num();
@@ -369,6 +370,9 @@ char *solve(char *curr_board, int num_threads) {
     }
 
     freequeue(local_queues[k]);
+
+     double finish = omp_get_wtime();
+     printf("Elapsed time = %e seconds\n", finish-start);
   }
 
   freequeue(queue);
